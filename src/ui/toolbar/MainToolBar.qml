@@ -83,6 +83,18 @@ Rectangle {
             onClicked:          _activeVehicle.closeVehicle()
             visible:            _activeVehicle && _communicationLost && currentToolbar === flyViewToolbar
         }
+
+        Button {
+        id: tutButton
+        width: height
+        text: "VayDyn"
+
+        onClicked: {
+            Qt.openUrlExternally("https://vaydyn.com/");
+
+        }
+
+        }
     }
 
     QGCFlickable {

@@ -13,15 +13,17 @@
 
 #include "CustomFirmwarePlugin.h"
 #include "CustomAutoPilotPlugin.h"
+#include "CustomCameraManager.h"
+#include "CustomCameraControl.h"
 
 //-----------------------------------------------------------------------------
 CustomFirmwarePlugin::CustomFirmwarePlugin()
 {
     for (int i = 0; i < _flightModeInfoList.count(); i++) {
         FlightModeInfo_t& info = _flightModeInfoList[i];
-        //-- Narrow the flight mode options to only these
-        if (info.name != _holdFlightMode && info.name != _rtlFlightMode && info.name != _missionFlightMode) {
-            // No other flight modes can be set
+        //-- Narrow the options to only these two
+        if (info.name != _altCtlFlightMode &&
+            info.name != _posCtlFlightMode) {
             info.canBeSet = false;
         }
     }
@@ -33,25 +35,50 @@ AutoPilotPlugin* CustomFirmwarePlugin::autopilotPlugin(Vehicle* vehicle)
     return new CustomAutoPilotPlugin(vehicle, vehicle);
 }
 
-const QVariantList& CustomFirmwarePlugin::toolIndicators(const Vehicle* vehicle)
+//-----------------------------------------------------------------------------
+QGCCameraManager*
+CustomFirmwarePlugin::createCameraManager(Vehicle *vehicle)
 {
-    if (_toolIndicatorList.size() == 0) {
-        // First call the base class to get the standard QGC list. This way we are guaranteed to always get
-        // any new toolbar indicators which are added upstream in our custom build.
-        _toolIndicatorList = FirmwarePlugin::toolIndicators(vehicle);
-        // Then specifically remove the RC RSSI indicator.
-        _toolIndicatorList.removeOne(QVariant::fromValue(QUrl::fromUserInput("qrc:/toolbar/RCRSSIIndicator.qml")));
-    }
-    return _toolIndicatorList;
+    return new CustomCameraManager(vehicle);
 }
 
-// Tells QGC that your vehicle has a gimbal on it. This will in turn cause thing like gimbal commands to point
-// the camera straight down for surveys to be automatically added to Plans.
-bool CustomFirmwarePlugin::hasGimbal(Vehicle* /*vehicle*/, bool& rollSupported, bool& pitchSupported, bool& yawSupported)
+//-----------------------------------------------------------------------------
+QGCCameraControl*
+CustomFirmwarePlugin::createCameraControl(const mavlink_camera_information_t* info, Vehicle *vehicle, int compID, QObject* parent)
 {
-    rollSupported = false;
-    pitchSupported = true;
-    yawSupported = true;
+    return new CustomCameraControl(info, vehicle, compID, parent);
+}
 
-    return true;
+//-----------------------------------------------------------------------------
+const QVariantList&
+CustomFirmwarePlugin::toolBarIndicators(const Vehicle*)
+{
+    if(_toolBarIndicatorList.size() == 0) {
+#if defined(QGC_ENABLE_PAIRING)
+        _toolBarIndicatorList.append(QVariant::fromValue(QUrl::fromUserInput("qrc:/custom/PairingIndicator.qml")));
+#endif
+        _toolBarIndicatorList.append(QVariant::fromValue(QUrl::fromUserInput("qrc:/custom/CustomROIIndicator.qml")));
+        _toolBarIndicatorList.append(QVariant::fromValue(QUrl::fromUserInput("qrc:/toolbar/GPSIndicator.qml")));
+        _toolBarIndicatorList.append(QVariant::fromValue(QUrl::fromUserInput("qrc:/toolbar/TelemetryRSSIIndicator.qml")));
+        _toolBarIndicatorList.append(QVariant::fromValue(QUrl::fromUserInput("qrc:/custom/CustomRCRSSIIndicator.qml")));
+        _toolBarIndicatorList.append(QVariant::fromValue(QUrl::fromUserInput("qrc:/toolbar/BatteryIndicator.qml")));
+    }
+    return _toolBarIndicatorList;
+}
+
+//-----------------------------------------------------------------------------
+QStringList
+CustomFirmwarePlugin::joystickFlightModes(Vehicle* vehicle)
+{
+    QStringList flightModes;
+    foreach (const FlightModeInfo_t& info, _flightModeInfoList) {
+        bool fw = (vehicle->fixedWing() && info.fixedWing);
+        bool mc = (vehicle->multiRotor() && info.multiRotor);
+        // show all modes for generic, vtol, etc
+        bool other = !vehicle->fixedWing() && !vehicle->multiRotor();
+        if (fw || mc || other) {
+            flightModes += *info.name;
+        }
+    }
+    return flightModes;
 }
